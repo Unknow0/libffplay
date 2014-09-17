@@ -3,6 +3,7 @@
 
 AC_PREREQ([2.69])
 AC_INIT([libffplay], [1.0])
+AC_CONFIG_AUX_DIR([tools])
 AM_INIT_AUTOMAKE([foreign])
 LT_INIT
 
