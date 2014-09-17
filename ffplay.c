@@ -33,7 +33,7 @@ bus_t *bus_create();
 void bus_add(bus_t*, void(*)(void*), void*);
 void bus_destoy(bus_t*);
 
-static logger_t *l;
+logger_t *l;
 
 int decode_packet(player_t *p, AVPacket *pkt, int *got_frame, int cached)
 	{
@@ -87,7 +87,7 @@ int player_open(player_t *p)
 	int ret=avformat_open_input(&p->in_ctx, p->file, NULL, NULL);
 	if (ret< 0)
 		{
-		error(l, "failed to open file: %s", av_err2str(ret));
+		error(l, "failed to open file '%s': %s", p->file, av_err2str(ret));
 		goto err;
 		}
 	ret=avformat_find_stream_info(p->in_ctx, NULL);
@@ -175,7 +175,10 @@ start:
 		return;
 
 	if(player_open(p)<0)
+		{
+		p->curr_state=PLAYER_STATE_STOP;
 		goto start;
+		}
 	info(l, "playing '%s'", p->file);
 
 	av_init_packet(&pkt);
@@ -221,10 +224,12 @@ flush:
 err:
 	avformat_close_input(&p->in_ctx);
 	p->in_ctx=NULL;
-	p->curr_state=PLAYER_STATE_STOP;
-	info(l, "done");
-	if(p->onEof)
-		bus_add(p->bus, (void(*)(void*))p->onEof, p);
+	if(p->curr_state==PLAYER_STATE_PLAY)
+		{
+		p->curr_state=PLAYER_STATE_STOP;
+		if(p->onEof)
+			bus_add(p->bus, (void(*)(void*))p->onEof, p);
+		}
 	goto start;
 	}
 
@@ -248,7 +253,7 @@ void player_play(player_t *p, const char *file)
 	strcpy(p->file, file);
 	
 	while(p->next_state!=PLAYER_STATE_NULL)
-		sleep(100);
+		usleep(100);
 	player_setstate(p, PLAYER_STATE_PLAY);
 	}
 

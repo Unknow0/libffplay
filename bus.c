@@ -21,6 +21,7 @@
 
 #include "libffplay.h"
 
+extern logger_t *l;
 void *bus_loop(void *arg)
 	{
 	bus_t *bus=arg;
@@ -32,8 +33,9 @@ start:
 		pthread_cond_wait(&bus->cond, &bus->mutex);
 	e=bus->event+bus->event_off;
 	pthread_mutex_unlock(&bus->mutex);
-
+	debug(l, "callback calling");
 	e->callback(e->arg);
+	debug(l, "callback done");
 
 	pthread_mutex_lock(&bus->mutex);
 	bus->event_off=(bus->event_off+1)%BUS_MAX_EVENT;
