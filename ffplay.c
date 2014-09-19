@@ -197,7 +197,7 @@ start:
 			goto flush;
 
 		ret=av_read_frame(p->in_ctx, &pkt);
-		if(ret>=0)
+		if(ret>=0 && pkt.stream_index==p->in_st_idx)
 			{
 			AVPacket org=pkt;
 			do
