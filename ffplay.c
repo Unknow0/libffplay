@@ -48,6 +48,8 @@ int decode_packet(player_t *p, AVPacket *pkt, int *got_frame, int cached)
 	outframe->sample_rate=outctx->sample_rate;
 	outframe->format=outctx->sample_fmt;
 
+	p->last_pts=pkt->pts;
+
 	ret=avcodec_decode_audio4(ctx, inframe, got_frame, pkt);
 	if(ret<0)
 		{
@@ -145,12 +147,27 @@ err:
 	return ret;
 	}
 
+int player_stream_info(player_t *p, int64_t *start, int64_t *duration)
+	{
+	AVStream *st;
+	if(!p->in_ctx)
+		return 1;
+	st=p->in_ctx->streams[p->in_st_idx];
+	if(start)
+		*start=st->start_time;
+	if(duration)
+		*duration=st->duration;
+	return 0;
+	}
+
 void player_checkstate(player_t *p)
 	{
 	if(p->next_state!=PLAYER_STATE_NULL)
 		{
 		p->curr_state=p->next_state;
 		p->next_state=PLAYER_STATE_NULL;
+		if(p->on_state_change)
+			bus_add(p->bus, (void(*)(void*))p->on_state_change, p);
 		}
 	}
 
@@ -207,6 +224,8 @@ start:
 					goto err;
 				pkt.data+=ret;
 				pkt.size-=ret;
+				if(p->on_update)
+					bus_add(p->bus, (void(*)(void*))p->on_update, p);
 				} 
 			while(pkt.size>0);
 			av_free_packet(&org);
@@ -227,8 +246,8 @@ err:
 	if(p->curr_state==PLAYER_STATE_PLAY)
 		{
 		p->curr_state=PLAYER_STATE_STOP;
-		if(p->onEof)
-			bus_add(p->bus, (void(*)(void*))p->onEof, p);
+		if(p->on_eof)
+			bus_add(p->bus, (void(*)(void*))p->on_eof, p);
 		}
 	goto start;
 	}

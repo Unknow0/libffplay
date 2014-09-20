@@ -69,8 +69,12 @@ typedef struct player
 	char *file;
 	int file_alloc;
 
+	int64_t last_pts;
+
 	/* callback */
-	void (*onEof)(struct player *);
+	void (*on_state_change)(struct player *);
+	void (*on_update)(struct player *);
+	void (*on_eof)(struct player *);
 
 	bus_t *bus;
 	} player_t;
@@ -83,5 +87,7 @@ void player_setstate(player_t *p, player_state_e state);
 void player_destroy(player_t *player);
 
 int player_metadata(char *file, void (*callback)(const char *, const char *, void *), void *data);
+
+int player_stream_info(player_t *p, int64_t *start, int64_t *duration);
 
 #endif
