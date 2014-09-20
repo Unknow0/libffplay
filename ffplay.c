@@ -48,7 +48,6 @@ int decode_packet(player_t *p, AVPacket *pkt, int *got_frame, int cached)
 	outframe->sample_rate=outctx->sample_rate;
 	outframe->format=outctx->sample_fmt;
 
-	p->last_pts=pkt->pts;
 
 	ret=avcodec_decode_audio4(ctx, inframe, got_frame, pkt);
 	if(ret<0)
@@ -58,8 +57,10 @@ int decode_packet(player_t *p, AVPacket *pkt, int *got_frame, int cached)
 		}
 	decoded=FFMIN(ret, pkt->size);
 
+
 	if(*got_frame)
 		{
+		p->last_pts=inframe->pts!=AV_NOPTS_VALUE?inframe->pts:av_frame_get_best_effort_timestamp(inframe);
 		ret=swr_convert_frame(p->swr, outframe, inframe);
 		if(ret<0)
 			{
@@ -140,24 +141,12 @@ int player_open(player_t *p)
 		error(l, "failed to init resampler: %s", av_err2str(ret));
 		goto err;
 		}
+	p->duration=p->in_ctx->streams[p->in_st_idx]->duration;
 	return 0;
 err:
 	if(p->in_ctx)
 		avformat_close_input(&p->in_ctx);
 	return ret;
-	}
-
-int player_stream_info(player_t *p, int64_t *start, int64_t *duration)
-	{
-	AVStream *st;
-	if(!p->in_ctx)
-		return 1;
-	st=p->in_ctx->streams[p->in_st_idx];
-	if(start)
-		*start=st->start_time;
-	if(duration)
-		*duration=st->duration;
-	return 0;
 	}
 
 void player_checkstate(player_t *p)
@@ -224,8 +213,6 @@ start:
 					goto err;
 				pkt.data+=ret;
 				pkt.size-=ret;
-				if(p->on_update)
-					bus_add(p->bus, (void(*)(void*))p->on_update, p);
 				} 
 			while(pkt.size>0);
 			av_free_packet(&org);
