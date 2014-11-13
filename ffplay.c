@@ -277,6 +277,10 @@ void player_destroy(player_t *p)
 	pthread_join(p->loop, NULL);
 	pthread_cond_destroy(&p->cond);
 	pthread_mutex_destroy(&p->mutex);
+
+	av_format_close_output(&p->out_ctx);
+	swr_free(&p->swr);
+	bus_destoy(p->bus);
 	free(p);
 	}
 
