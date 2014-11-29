@@ -33,9 +33,9 @@ start:
 		pthread_cond_wait(&bus->cond, &bus->mutex);
 	e=bus->event+bus->event_off;
 	pthread_mutex_unlock(&bus->mutex);
-	debug(l, "callback calling");
+	debug(l, "callback calling %d", bus->event_off);
 	e->callback(e->arg);
-	debug(l, "callback done");
+	debug(l, "callback done %d", bus->event_off);
 
 	pthread_mutex_lock(&bus->mutex);
 	bus->event_off=(bus->event_off+1)%BUS_MAX_EVENT;
@@ -58,10 +58,11 @@ void bus_destroy(bus_t *bus)
 	{
 	pthread_cancel(bus->loop);
 	pthread_cond_signal(&bus->cond);
-	pthread_join(bus->loop);
+	pthread_join(bus->loop, NULL);
 
 	pthread_cond_destroy(&bus->cond);
 	pthread_mutex_destroy(&bus->mutex);
+	free(bus);
 	}
 
 void bus_add(bus_t *bus, void (*callback)(void*), void *arg)

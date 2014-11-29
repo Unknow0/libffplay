@@ -35,21 +35,13 @@ void bus_destoy(bus_t*);
 
 logger_t *l;
 
-int decode_packet(player_t *p, AVPacket *pkt, int *got_frame, int cached)
+int decode_packet(player_t *p, AVPacket *pkt, int *got_frame)
 	{
 	int decoded=0;
 	int ret;
-	AVFrame *inframe=av_frame_alloc();
-	AVFrame *outframe=av_frame_alloc();
 	AVCodecContext *ctx=p->in_ctx->streams[p->in_st_idx]->codec;
-	AVCodecContext *outctx=p->out_ctx->streams[p->out_st_idx]->codec;
 
-	outframe->channel_layout=outctx->channel_layout;
-	outframe->sample_rate=outctx->sample_rate;
-	outframe->format=outctx->sample_fmt;
-
-
-	ret=avcodec_decode_audio4(ctx, inframe, got_frame, pkt);
+	ret=avcodec_decode_audio4(ctx, p->inframe, got_frame, pkt);
 	if(ret<0)
 		{
 		error(l, "failed to decode packet %s", av_err2str(ret));
@@ -60,25 +52,24 @@ int decode_packet(player_t *p, AVPacket *pkt, int *got_frame, int cached)
 
 	if(*got_frame)
 		{
-		p->last_pts=inframe->pts!=AV_NOPTS_VALUE?inframe->pts:av_frame_get_best_effort_timestamp(inframe);
-		ret=swr_convert_frame(p->swr, outframe, inframe);
+		p->last_pts=p->inframe->pts!=AV_NOPTS_VALUE?p->inframe->pts:av_frame_get_best_effort_timestamp(p->inframe);
+		ret=swr_convert_frame(p->swr, p->outframe, p->inframe);
 		if(ret<0)
 			{
 			error(l, "failed to feed filter: %s", av_err2str(ret));
 			goto err;
 			}
-		av_write_uncoded_frame(p->out_ctx, p->out_st_idx, outframe);
-		av_frame_free(&inframe);
-		if(ret==AVERROR_EOF)
-		;	// ok
-		else if(ret<0 && ret!=AVERROR(EAGAIN))
+		av_write_uncoded_frame(p->out_ctx, p->out_st_idx, p->outframe);
+		if(ret<0 && ret!=AVERROR(EAGAIN) && ret!=AVERROR_EOF)
 			{
 			error(l, "error while filtering data: %s", av_err2str(ret));
-			return ret;
+			goto err;
 			}
 		}
-	return decoded;
+	ret=decoded;
 err:
+	if(ctx->refcounted_frames)
+		av_frame_unref(p->inframe);
 	return ret;
 	}
 
@@ -178,7 +169,7 @@ start:
 		player_waitstate(p);
 	pthread_mutex_unlock(&p->mutex);
 	if(p->curr_state==PLAYER_EXIT)
-		return;
+		goto flush;
 
 	if(player_open(p)<0)
 		{
@@ -197,8 +188,6 @@ start:
 		while(p->curr_state==PLAYER_STATE_PAUSE)
 			player_waitstate(p);
 		pthread_mutex_unlock(&p->mutex);
-		if(p->curr_state==PLAYER_EXIT)
-			return;
 		if(p->curr_state!=PLAYER_STATE_PLAY)
 			goto flush;
 
@@ -208,15 +197,20 @@ start:
 			AVPacket org=pkt;
 			do
 				{
-				ret=decode_packet(p, &pkt, &got_frame, 0);
+				ret=decode_packet(p, &pkt, &got_frame);
 				if(ret<0)
+					{
+					av_free_packet(&org);
 					goto err;
+					}
 				pkt.data+=ret;
 				pkt.size-=ret;
 				} 
 			while(pkt.size>0);
 			av_free_packet(&org);
 			}
+		else
+			av_free_packet(&pkt);
 		}
 	while(ret>=0);
 flush:
@@ -224,18 +218,21 @@ flush:
 	pkt.size=0;
 	do
 		{
-		ret=decode_packet(p, &pkt, &got_frame, 1);
+		ret=decode_packet(p, &pkt, &got_frame);
 		}
 	while(got_frame);
 err:
+	avcodec_close(p->in_ctx->streams[p->in_st_idx]->codec);
 	avformat_close_input(&p->in_ctx);
-	p->in_ctx=NULL;
 	if(p->curr_state==PLAYER_STATE_PLAY)
 		{
 		p->curr_state=PLAYER_STATE_STOP;
+		info(l, "EOF");
 		if(p->on_eof)
 			bus_add(p->bus, (void(*)(void*))p->on_eof, p);
 		}
+	if(p->curr_state==PLAYER_EXIT)
+		return;
 	goto start;
 	}
 
@@ -243,13 +240,14 @@ void player_play(player_t *p, const char *file)
 	{
 	int ret;
 	int path_size=strlen(file)+1;
-	char *path;
 
 	player_setstate(p, PLAYER_STATE_STOP);
+	while(p->next_state!=PLAYER_STATE_NULL)
+		usleep(100);
 	
 	if(p->file_alloc<path_size)
 		{
-		path=realloc(p->file, path_size);
+		char *path=realloc(p->file, path_size);
 		if(path==NULL)
 			return;
 		p->file=path;
@@ -258,8 +256,6 @@ void player_play(player_t *p, const char *file)
 
 	strcpy(p->file, file);
 	
-	while(p->next_state!=PLAYER_STATE_NULL)
-		usleep(100);
 	player_setstate(p, PLAYER_STATE_PLAY);
 	}
 
@@ -278,9 +274,17 @@ void player_destroy(player_t *p)
 	pthread_cond_destroy(&p->cond);
 	pthread_mutex_destroy(&p->mutex);
 
-	av_format_close_output(&p->out_ctx);
+	av_write_trailer(p->out_ctx);
+	
+	avcodec_close(p->out_ctx->streams[p->out_st_idx]->codec);
+	avformat_free_context(p->out_ctx);
 	swr_free(&p->swr);
-	bus_destoy(p->bus);
+	bus_destroy(p->bus);
+
+	av_frame_free(&p->outframe);
+	av_frame_free(&p->inframe);
+
+	free(p->file);
 	free(p);
 	}
 
@@ -352,7 +356,14 @@ player_t *player_init(char *outfile, char *outfmt)
 			av_opt_set_channel_layout(p->swr, "out_channel_layout", s->codec->channel_layout, 0);
 			av_opt_set_int(p->swr, "out_sample_rate", s->codec->sample_rate, 0);
 			av_opt_set_sample_fmt(p->swr, "out_sample_fmt", s->codec->sample_fmt, 0);
-			
+
+			p->outframe=av_frame_alloc();
+			p->outframe->channel_layout=s->codec->channel_layout;
+			p->outframe->sample_rate=s->codec->sample_rate;
+			p->outframe->format=s->codec->sample_fmt;
+
+			p->inframe=av_frame_alloc();
+
 			p->bus=bus_create();
 
 			pthread_mutex_init(&p->mutex, NULL);

@@ -60,6 +60,8 @@ typedef struct player
 	AVFormatContext *out_ctx;
 	int out_st_idx;
 	SwrContext *swr;
+	AVFrame *outframe;
+	AVFrame *inframe;
 
 	pthread_t loop;
 	pthread_mutex_t mutex;
@@ -71,7 +73,7 @@ typedef struct player
 
 	int64_t last_pts;
 	int64_t duration;
-
+	
 	/* callback */
 	void (*on_state_change)(struct player *);
 	void (*on_eof)(struct player *);
