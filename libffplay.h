@@ -46,7 +46,6 @@ typedef struct bus_t
 	pthread_cond_t cond;
 	pthread_t loop;
 
-
 	unsigned int event_off;
 	unsigned int event_count;
 	struct event event[BUS_MAX_EVENT];
@@ -60,7 +59,6 @@ typedef struct player
 	AVFormatContext *out_ctx;
 	int out_st_idx;
 	SwrContext *swr;
-	AVFrame *outframe;
 	AVFrame *inframe;
 
 	pthread_t loop;

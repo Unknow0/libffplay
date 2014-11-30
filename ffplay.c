@@ -31,7 +31,7 @@
 
 bus_t *bus_create();
 void bus_add(bus_t*, void(*)(void*), void*);
-void bus_destoy(bus_t*);
+void bus_destroy(bus_t*);
 
 logger_t *l;
 
@@ -52,14 +52,21 @@ int decode_packet(player_t *p, AVPacket *pkt, int *got_frame)
 
 	if(*got_frame)
 		{
+		AVStream *s=p->out_ctx->streams[p->out_st_idx];
+		AVFrame *outframe=av_frame_alloc();
+		outframe->channel_layout=s->codec->channel_layout;
+		outframe->sample_rate=s->codec->sample_rate;
+		outframe->format=s->codec->sample_fmt;
+
 		p->last_pts=p->inframe->pts!=AV_NOPTS_VALUE?p->inframe->pts:av_frame_get_best_effort_timestamp(p->inframe);
-		ret=swr_convert_frame(p->swr, p->outframe, p->inframe);
+		ret=swr_convert_frame(p->swr, outframe, p->inframe);
 		if(ret<0)
 			{
 			error(l, "failed to feed filter: %s", av_err2str(ret));
+			av_frame_free(&outframe);
 			goto err;
 			}
-		av_write_uncoded_frame(p->out_ctx, p->out_st_idx, p->outframe);
+		av_write_uncoded_frame(p->out_ctx, p->out_st_idx, outframe);
 		if(ret<0 && ret!=AVERROR(EAGAIN) && ret!=AVERROR_EOF)
 			{
 			error(l, "error while filtering data: %s", av_err2str(ret));
@@ -281,7 +288,6 @@ void player_destroy(player_t *p)
 	swr_free(&p->swr);
 	bus_destroy(p->bus);
 
-	av_frame_free(&p->outframe);
 	av_frame_free(&p->inframe);
 
 	free(p->file);
@@ -357,10 +363,6 @@ player_t *player_init(char *outfile, char *outfmt)
 			av_opt_set_int(p->swr, "out_sample_rate", s->codec->sample_rate, 0);
 			av_opt_set_sample_fmt(p->swr, "out_sample_fmt", s->codec->sample_fmt, 0);
 
-			p->outframe=av_frame_alloc();
-			p->outframe->channel_layout=s->codec->channel_layout;
-			p->outframe->sample_rate=s->codec->sample_rate;
-			p->outframe->format=s->codec->sample_fmt;
 
 			p->inframe=av_frame_alloc();
 
