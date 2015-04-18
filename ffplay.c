@@ -318,10 +318,10 @@ int player_metadata(char *file, void (*callback)(const char *, const char *, voi
 	return ret>=0;
 	}
 
-player_t *player_init(char *outfile, char *outfmt)
+player_t *player_init(char *outfile, char *outfmt, char *logger)
 	{
 	if(l==NULL)
-		l=get_logger("ffplay");
+		l=get_logger(logger?logger:"ffplay");
 	player_t *p=malloc(sizeof(player_t));
 	if(p)
 		{
