@@ -79,7 +79,7 @@ typedef struct player
 	bus_t *bus;
 	} player_t;
 
-player_t *player_init(char *outfile, char *outfmt, char *logger);
+player_t *player_init(char *outfile, char *outfmt);
 
 void player_play(player_t *player, const char *);
 void player_setstate(player_t *p, player_state_e state);
