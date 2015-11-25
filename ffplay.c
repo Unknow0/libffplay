@@ -29,10 +29,6 @@
 
 #include "libffplay.h"
 
-bus_t *bus_create();
-void bus_add(bus_t*, void(*)(void*), void*);
-void bus_destroy(bus_t*);
-
 logger_t *l;
 
 int decode_packet(player_t *p, AVPacket *pkt, int *got_frame)
@@ -366,7 +362,7 @@ player_t *player_init(char *outfile, char *outfmt)
 
 			p->inframe=av_frame_alloc();
 
-			p->bus=bus_create();
+			p->bus=bus_create(20);
 
 			pthread_mutex_init(&p->mutex, NULL);
 			pthread_cond_init(&p->cond, NULL);

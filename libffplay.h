@@ -21,8 +21,7 @@
 #include <libavformat/avformat.h>
 #include <libavfilter/avfilter.h>
 #include <libswresample/swresample.h>
-
-#define BUS_MAX_EVENT 50
+#include <utils/bus.h>
 
 typedef enum player_state
 	{
@@ -32,24 +31,6 @@ typedef enum player_state
 	PLAYER_STATE_PAUSE,
 	PLAYER_EXIT
 	} player_state_e;
-
-struct event
-	{
-	void (*callback)(void*);
-	void *arg;
-	struct event *next;
-	};
-
-typedef struct bus_t
-	{
-	pthread_mutex_t mutex;
-	pthread_cond_t cond;
-	pthread_t loop;
-
-	unsigned int event_off;
-	unsigned int event_count;
-	struct event event[BUS_MAX_EVENT];
-	} bus_t;
 
 typedef struct player
 	{

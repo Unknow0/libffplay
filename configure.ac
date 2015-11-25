@@ -13,7 +13,7 @@ AC_CONFIG_SRCDIR([ffplay.c])
 AC_PROG_CC
 
 # Checks for libraries.
-PKG_CHECK_MODULES([ffmpeg], [libavdevice libavformat libavcodec libavutil libavfilter])
+PKG_CHECK_MODULES([ffmpeg], [libavdevice libavformat libavcodec libavutil libavfilter utils])
 
 # Checks for header files.
 AC_CHECK_HEADERS([stdlib.h string.h])

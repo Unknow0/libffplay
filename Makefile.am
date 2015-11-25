@@ -1,7 +1,7 @@
 EXTRA_DIST=README.md
 
 lib_LTLIBRARIES=libffplay.la
-libffplay_la_SOURCES=ffplay.c bus.c
+libffplay_la_SOURCES=ffplay.c
 
 include_HEADERS=libffplay.h
 
